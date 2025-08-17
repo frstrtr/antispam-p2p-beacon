@@ -69,6 +69,15 @@ class SpammerCheckResource(resource.Resource):
         user_id = request.args.get(b"user_id", [None])[0]
         if user_id:
             user_id = user_id.decode("utf-8")
+            
+            # Validate that user_id is numeric (Telegram user IDs are always numbers)
+            try:
+                int(user_id)
+            except ValueError:
+                LOGGER.error("%s Invalid user_id. Must be a number.", user_id)
+                request.setResponseCode(400)
+                return b"Invalid user_id. Must be a number."
+                
             LOGGER.info("\033[7m%s received HTTP request\033[0m", user_id)
 
             # Initialize response data
@@ -352,20 +361,59 @@ class ReportIdResource(resource.Resource):
     def render_POST(self, request: Request):
         """Handle POST requests to report a spammer by ID."""
         try:
-            user_id = request.args.get(b"user_id", [None])[0]
-
             # Get the client IP address
             client_ip = request.getClientIP()
             if client_ip != "127.0.0.1":
                 LOGGER.warning("Unauthorized access attempt from IP: %s", client_ip)
                 request.setResponseCode(403)  # Forbidden
                 return b"Forbidden: Only localhost can access this endpoint."
+            
+            LOGGER.debug("Request headers: %s", request.getAllHeaders())
+            LOGGER.debug("Request args: %s", request.args)
+            
+            # Try to parse JSON body first, then fallback to form parameters
+            user_id = None
+            
+            # Check if we have a request body with content-type application/json
+            content_type = request.getHeader(b'content-type')
+            if content_type and b'application/json' in content_type:
+                try:
+                    # Read the raw body data
+                    body_data = request.content.read()
+                    if not body_data:
+                        # Try alternative method
+                        request.content.seek(0)
+                        body_data = request.content.read()
+                    
+                    LOGGER.debug("Request body: %s", body_data)
+                    
+                    if body_data:
+                        data = json.loads(body_data.decode('utf-8'))
+                        user_id = data.get('user_id') or data.get('spammer_id')
+                        LOGGER.debug("Parsed JSON data: %s, extracted user_id: %s", data, user_id)
+                except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as e:
+                    LOGGER.debug("Failed to parse JSON body: %s", e)
+            
+            # Fallback to query/form parameters
+            if not user_id:
+                user_id_bytes = request.args.get(b"user_id", [None])[0]
+                if user_id_bytes:
+                    user_id = user_id_bytes.decode("utf-8")
+                    LOGGER.debug("Got user_id from args: %s", user_id)
+            
             if not user_id:
                 LOGGER.error("%s Invalid request. Must include user_id.", "unknown")
                 request.setResponseCode(400)
                 return b"Invalid request. Must include user_id."
-
-            user_id = user_id.decode("utf-8")
+            
+            # Validate that user_id is numeric (Telegram user IDs are always numbers)
+            try:
+                int(user_id)
+            except ValueError:
+                LOGGER.error("%s Invalid user_id. Must be a number.", user_id)
+                request.setResponseCode(400)
+                return b"Invalid user_id. Must be a number."
+                
             LOGGER.warning("%s Received POST request to report spammer", user_id)
 
             # Assuming that if the request reaches here, the user is a spammer
@@ -379,7 +427,7 @@ class ReportIdResource(resource.Resource):
 
             request.setHeader(b"content-type", b"application/json")
             response = json.dumps(
-                {"status": "success", "user_id": user_id, "is_spammer": is_spammer}
+                {"success": True, "user_id": user_id, "is_spammer": is_spammer}
             ).encode("utf-8")
             request.write(response)
             request.finish()
@@ -406,21 +454,47 @@ class RemoveIdResource(resource.Resource):
     def render_POST(self, request: Request):
         """Handle POST requests to remove a spammer by ID."""
         try:
-            user_id = request.args.get(b"user_id", [None])[0]
-
             # Get the client IP address
             client_ip = request.getClientIP()
             if client_ip != "127.0.0.1":
                 LOGGER.warning("Unauthorized access attempt from IP: %s", client_ip)
                 request.setResponseCode(403)  # Forbidden
                 return b"Forbidden: Only localhost can access this endpoint."
+            
+            # Try to parse JSON body first, then fallback to form parameters
+            user_id = None
+            
+            try:
+                # Get the entire request content as bytes
+                body = request.content.getvalue()
+                LOGGER.debug("Request body: %s", body)
+                
+                if body:
+                    data = json.loads(body.decode('utf-8'))
+                    user_id = data.get('user_id') or data.get('spammer_id')
+                    LOGGER.debug("Parsed JSON data: %s, extracted user_id: %s", data, user_id)
+            except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as e:
+                LOGGER.debug("Failed to parse JSON body: %s", e)
+            
+            # Fallback to query/form parameters
+            if not user_id:
+                user_id_bytes = request.args.get(b"user_id", [None])[0]
+                if user_id_bytes:
+                    user_id = user_id_bytes.decode("utf-8")
 
             if not user_id:
                 LOGGER.error("%s Invalid request. Must include user_id.", "unknown")
                 request.setResponseCode(400)
                 return b"Invalid request. Must include user_id."
-
-            user_id = user_id.decode("utf-8")
+            
+            # Validate that user_id is numeric (Telegram user IDs are always numbers)
+            try:
+                int(user_id)
+            except ValueError:
+                LOGGER.error("%s Invalid user_id. Must be a number.", user_id)
+                request.setResponseCode(400)
+                return b"Invalid user_id. Must be a number."
+                
             LOGGER.warning("%s Received POST request to remove spammer", user_id)
 
             # Remove the data and broadcast using unified gunban
@@ -432,7 +506,7 @@ class RemoveIdResource(resource.Resource):
 
             request.setHeader(b"content-type", b"application/json")
             response = json.dumps(
-                {"status": "success", "user_id": user_id, "removed": True}
+                {"success": True, "user_id": user_id, "removed": True}
             ).encode("utf-8")
             request.write(response)
             request.finish()
@@ -468,11 +542,18 @@ class UnbanResource(resource.Resource):
                 return b"Forbidden: Only localhost can access this endpoint."
             
             # Parse JSON body
-            content_length = request.getHeader(b'content-length')
-            if content_length:
-                content = request.content.read()
-                data = json.loads(content.decode('utf-8'))
-            else:
+            try:
+                # Get the entire request content as bytes
+                body = request.content.getvalue()
+                LOGGER.debug("Request body: %s", body)
+                
+                if body:
+                    data = json.loads(body.decode('utf-8'))
+                    LOGGER.debug("Parsed JSON data: %s", data)
+                else:
+                    data = {}
+            except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as e:
+                LOGGER.debug("Failed to parse JSON: %s", e)
                 # Fallback to form parameters
                 user_id = request.args.get(b"user_id", [None])[0]
                 if user_id:
@@ -480,12 +561,20 @@ class UnbanResource(resource.Resource):
                 else:
                     data = {}
             
-            spammer_id = data.get("spammer_id", "").strip()
+            spammer_id = data.get("spammer_id") or data.get("user_id", "").strip()
             
             if not spammer_id:
-                LOGGER.error("Invalid unban request. Must include spammer_id.")
+                LOGGER.error("Invalid unban request. Must include spammer_id or user_id.")
                 request.setResponseCode(400)
-                return b"Invalid request. Must include spammer_id."
+                return b"Invalid request. Must include spammer_id or user_id."
+            
+            # Validate that spammer_id is numeric (Telegram user IDs are always numbers)
+            try:
+                int(spammer_id)
+            except ValueError:
+                LOGGER.error("%s Invalid spammer_id. Must be a number.", spammer_id)
+                request.setResponseCode(400)
+                return b"Invalid spammer_id. Must be a number."
             
             # Check if spammer exists before attempting unban
             from server.database import get_spammer_from_db
@@ -500,7 +589,8 @@ class UnbanResource(resource.Resource):
             
             if success:
                 response = {
-                    "status": "success",
+                    "success": True,
+                    "found": True,
                     "message": f"Spammer {spammer_id} unbanned and propagated",
                     "spammer_id": spammer_id
                 }
@@ -508,9 +598,14 @@ class UnbanResource(resource.Resource):
                 LOGGER.info("Successfully unbanned spammer %s", spammer_id)
                 return json.dumps(response).encode('utf-8')
             else:
+                response = {
+                    "success": False,
+                    "found": False,
+                    "message": f"Unban failed for spammer {spammer_id}"
+                }
+                request.setHeader(b"content-type", b"application/json")
                 LOGGER.error("Unban failed for spammer %s", spammer_id)
-                request.setResponseCode(500)
-                return json.dumps({"error": "Unban failed"}).encode('utf-8')
+                return json.dumps(response).encode('utf-8')
                 
         except json.JSONDecodeError:
             LOGGER.error("Invalid JSON in unban request")
