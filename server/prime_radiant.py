@@ -32,6 +32,7 @@ from server.server_config import (
     WEBSOCKET_PORT,
     HTTP_API_PORT,
     BOOTSTRAP_ADDRESSES,
+    BEACON_MODE_ONLY,
 )
 
 
@@ -52,15 +53,24 @@ def main():
 
     LOGGER.info("\033[95mStarting P2P server on port: %d\033[0m", port)
     LOGGER.info("Server UUID: \033[30;47m%s\033[0m", node_uuid)
+    
+    if BEACON_MODE_ONLY:
+        LOGGER.info("\033[93mBEACON MODE ONLY: External APIs and WebSocket disabled\033[0m")
+    else:
+        LOGGER.info("\033[92mFULL MODE: All services enabled\033[0m")
 
     # Find an available port if the default port is not available
     # port = find_available_port(port)
     # LOGGER.debug("Using port %d for P2P server", port)
 
-    ws_factory = SpammerCheckFactory()
-    ws_endpoint = endpoints.TCP4ServerEndpoint(reactor, WEBSOCKET_PORT)
-    ws_endpoint.listen(ws_factory)
-    LOGGER.info("\033[92mWebSocket server listening on port %d\033[0m", WEBSOCKET_PORT)
+    # Start WebSocket server only if not in beacon mode
+    if not BEACON_MODE_ONLY:
+        ws_factory = SpammerCheckFactory()
+        ws_endpoint = endpoints.TCP4ServerEndpoint(reactor, WEBSOCKET_PORT)
+        ws_endpoint.listen(ws_factory)
+        LOGGER.info("\033[92mWebSocket server listening on port %d\033[0m", WEBSOCKET_PORT)
+    else:
+        LOGGER.info("\033[93mWebSocket server disabled in beacon mode\033[0m")
 
     p2p_factory = P2PFactory(node_uuid)
 

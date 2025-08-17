@@ -106,6 +106,10 @@ BOOTSTRAP_ADDRESSES = _parse_bootstrap_addresses(os.getenv("BOOTSTRAP_ADDRESSES"
 # Database file for storing spammer data
 DATABASE_FILE = "spammers.db"
 
+# Beacon Mode Configuration
+BEACON_MODE_ONLY = os.getenv("BEACON_MODE_ONLY", "false").lower() in ("true", "1", "yes")
+
+# Legacy configuration variables (deprecated)
 BEACON = False
 # Set to True to enable beacon mode
 # Set to False to disable beacon mode

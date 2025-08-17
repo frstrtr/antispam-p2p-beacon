@@ -21,7 +21,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from server.database import retrieve_spammer_data_from_db, store_spammer_data
 from server.p2p import P2PFactory
 
-from server.server_config import LOGGER
+from server.server_config import LOGGER, BEACON_MODE_ONLY
 from server.database import delete_spammer_data
 
 
@@ -98,9 +98,13 @@ class SpammerCheckResource(resource.Resource):
             LOGGER.debug("%s Checking P2P network", user_id)
             p2p_deferred = self.check_p2p_data(user_id)
 
-            # Check static APIs
-            LOGGER.debug("%s Checking static APIs", user_id)
-            api_deferred = self.check_static_apis(user_id)
+            # Check static APIs only if not in beacon mode
+            if BEACON_MODE_ONLY:
+                LOGGER.debug("%s Beacon mode: skipping external API calls", user_id)
+                api_deferred = defer.succeed({})  # Return empty result
+            else:
+                LOGGER.debug("%s Checking static APIs", user_id)
+                api_deferred = self.check_static_apis(user_id)
 
             # Combine results
             combined_deferred = defer.DeferredList(
@@ -168,12 +172,17 @@ class SpammerCheckResource(resource.Resource):
                     # Reconstruct p2p data if it's not available
                     lols_bot_data = response_data.get("lols_bot", {})
                     cas_chat_data = response_data.get("cas_chat", {})
-                    # local_report_data =
-                    is_spammer = bool(
-                        lols_bot_data.get("banned", False)
-                        or cas_chat_data.get("result", {}).get("offenses", 0) > 0
-                        or response_data.get("is_spammer", False)
-                    )
+                    
+                    # In beacon mode, only consider local database and P2P data
+                    if BEACON_MODE_ONLY:
+                        is_spammer = bool(response_data.get("is_spammer", False))
+                    else:
+                        # Full mode: consider all sources
+                        is_spammer = bool(
+                            lols_bot_data.get("banned", False)
+                            or cas_chat_data.get("result", {}).get("offenses", 0) > 0
+                            or response_data.get("is_spammer", False)
+                        )
                     response_data["lols_bot"] = lols_bot_data
                     response_data["cas_chat"] = cas_chat_data
                     response_data["p2p"] = {
@@ -185,7 +194,7 @@ class SpammerCheckResource(resource.Resource):
                         is_spammer  # Update overall is_spammer status
                     )
 
-                if api_success and api_data:
+                if api_success and api_data and not BEACON_MODE_ONLY:
                     if response_data[
                         "is_spammer"
                     ]:  # if not already marked as spammer by local endpoint report
