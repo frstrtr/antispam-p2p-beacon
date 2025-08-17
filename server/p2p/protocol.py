@@ -5,6 +5,7 @@
 # server/p2p/protocol.py
 
 import json
+import time
 from twisted.internet import protocol
 from twisted.internet import task, defer
 from server.database import retrieve_spammer_data_from_db, delete_spammer_data
@@ -12,6 +13,7 @@ from server.server_config import LOGGER
 from .config import HANDSHAKE_INIT, HANDSHAKE_RESPONSE, RED_COLOR, GREEN_COLOR
 from .config import YELLOW_COLOR, INVERSE_COLOR, RESET_COLOR
 from .utils import split_json_objects, decode_nested_json
+from .security import SECURITY_MANAGER
 
 
 class P2PProtocol(protocol.Protocol):
@@ -27,6 +29,26 @@ class P2PProtocol(protocol.Protocol):
     def connectionMade(self):
         """Handle new P2P connections."""
         peer = self.get_peer()
+        
+        # Check for configuration changes before processing connection
+        SECURITY_MANAGER.check_config_reload()
+        
+        # Security check: Verify connection is allowed
+        allowed, reason = SECURITY_MANAGER.is_connection_allowed(peer.host)
+        if not allowed:
+            SECURITY_MANAGER.log_security_event(
+                "CONNECTION_REJECTED", 
+                f"Connection from {peer.host}:{peer.port} rejected: {reason}",
+                "warning"
+            )
+            LOGGER.warning(f"%sConnection rejected from %s:%d - %s%s", 
+                          RED_COLOR, peer.host, peer.port, reason, RESET_COLOR)
+            self.transport.loseConnection()
+            return
+            
+        # Register the connection for tracking
+        SECURITY_MANAGER.register_connection(peer.host, self.peer_uuid)
+        
         self.factory.peers.append(peer)
         LOGGER.info(
             "%sP2P connection made with %s:%d%s",
@@ -46,15 +68,43 @@ class P2PProtocol(protocol.Protocol):
 
     def send_handshake_init(self):
         """Send handshake initiation message."""
-        message = json.dumps({"type": HANDSHAKE_INIT, "uuid": self.factory.node_uuid})
-        self.transport.write(message.encode("utf-8"))
-        LOGGER.info("Sent handshake initiation: %s", message)
+        message = {"type": HANDSHAKE_INIT, "uuid": self.factory.node_uuid}
+        
+        # Add authentication data if required
+        auth_challenge = SECURITY_MANAGER.generate_auth_challenge(self.factory.node_uuid)
+        if auth_challenge:
+            message.update(auth_challenge)
+            
+        # Add version information
+        message["node_version"] = "1.0.0"
+        message["timestamp"] = time.time()
+        
+        # Sign the message if signing is enabled
+        message = SECURITY_MANAGER.sign_message(message, self.factory.node_uuid)
+        
+        message_json = json.dumps(message)
+        self.transport.write(message_json.encode("utf-8"))
+        LOGGER.info("Sent handshake initiation: %s", message_json)
 
     def send_handshake_response(self, node_uuid):
         """Send handshake response message."""
-        message = json.dumps({"type": HANDSHAKE_RESPONSE, "uuid": node_uuid})
-        self.transport.write(message.encode("utf-8"))
-        LOGGER.info("Sent handshake response: %s", message)
+        message = {"type": HANDSHAKE_RESPONSE, "uuid": node_uuid}
+        
+        # Add authentication data if required
+        auth_challenge = SECURITY_MANAGER.generate_auth_challenge(node_uuid)
+        if auth_challenge:
+            message.update(auth_challenge)
+            
+        # Add version information
+        message["node_version"] = "1.0.0"
+        message["timestamp"] = time.time()
+        
+        # Sign the message if signing is enabled
+        message = SECURITY_MANAGER.sign_message(message, node_uuid)
+        
+        message_json = json.dumps(message)
+        self.transport.write(message_json.encode("utf-8"))
+        LOGGER.info("Sent handshake response: %s", message_json)
 
     def dataReceived(self, data):
         """Handle received P2P data."""
@@ -70,14 +120,34 @@ class P2PProtocol(protocol.Protocol):
                 message = json.loads(json_string)
                 message = decode_nested_json(message)
 
-                # message = json.loads(data.decode("utf-8"))
-                # LOGGER.debug("Received data: %s", message)
+                # Security: Check if message is allowed
+                peer = self.get_peer()
+                message_type = message.get("type", "unknown")
+                
+                allowed, reason = SECURITY_MANAGER.is_message_allowed(
+                    peer.host, self.peer_uuid or "unknown", message_type
+                )
+                if not allowed:
+                    SECURITY_MANAGER.log_security_event(
+                        "MESSAGE_REJECTED",
+                        f"Message from {peer.host}:{peer.port} ({self.peer_uuid}) rejected: {reason}",
+                        "warning"
+                    )
+                    LOGGER.warning(f"%sMessage rejected from %s:%d - %s%s",
+                                  RED_COLOR, peer.host, peer.port, reason, RESET_COLOR)
+                    continue
+                    
+                # Security: Verify message signature if enabled
+                if not SECURITY_MANAGER.verify_message_signature(message, self.peer_uuid or "unknown"):
+                    SECURITY_MANAGER.log_security_event(
+                        "INVALID_SIGNATURE",
+                        f"Invalid message signature from {peer.host}:{peer.port} ({self.peer_uuid})",
+                        "warning"
+                    )
+                    LOGGER.warning(f"%sInvalid message signature from %s:%d%s",
+                                  RED_COLOR, peer.host, peer.port, RESET_COLOR)
+                    continue
 
-                message_type = message.get("type")
-
-                peer = (
-                    self.get_peer()
-                )  # XXX if there is concatenated data, this will be the last peer but what about others?
                 self.received_from_peer = (
                     peer  # Store the peer from which the data was received
                 )
@@ -91,9 +161,6 @@ class P2PProtocol(protocol.Protocol):
                     peer.node_uuid,
                     json.dumps(message, indent=4),
                 )
-                # if "type" not in data:
-                #     self.handle_p2p_data(data)
-                #     continue
 
                 if message_type == HANDSHAKE_INIT:
                     self.handle_handshake_init(message)
@@ -112,6 +179,11 @@ class P2PProtocol(protocol.Protocol):
                 elif message_type == "gunban":
                     self.handle_gunban_message(message)
                 else:
+                    SECURITY_MANAGER.log_security_event(
+                        "UNKNOWN_MESSAGE_TYPE",
+                        f"Unknown message type '{message_type}' from {peer.host}:{peer.port} ({self.peer_uuid})",
+                        "warning"
+                    )
                     LOGGER.warning(
                         "%sUnknown message type: %s%s",
                         RED_COLOR,
@@ -119,6 +191,12 @@ class P2PProtocol(protocol.Protocol):
                         RESET_COLOR,
                     )
             except json.JSONDecodeError as e:
+                peer = self.get_peer()
+                SECURITY_MANAGER.log_security_event(
+                    "JSON_DECODE_ERROR",
+                    f"Invalid JSON from {peer.host}:{peer.port}: {e}",
+                    "warning"
+                )
                 LOGGER.error("Failed to decode JSON: %s", e)
                 LOGGER.debug(
                     "Received from %s:%d",
@@ -126,9 +204,13 @@ class P2PProtocol(protocol.Protocol):
                     peer.port,
                 )
                 LOGGER.debug("Received data: %s", message)
-                # Handle the case where the message is not valid JSON
-                LOGGER.error("Failed to decode JSON data: %s", e)
             except Exception as e:
+                peer = self.get_peer()
+                SECURITY_MANAGER.log_security_event(
+                    "MESSAGE_PROCESSING_ERROR",
+                    f"Error processing message from {peer.host}:{peer.port}: {e}",
+                    "error"
+                )
                 LOGGER.error("Error processing data: %s", e)
 
     def handle_spammer_info_removal(self, message):
@@ -197,6 +279,46 @@ class P2PProtocol(protocol.Protocol):
         peer.node_uuid = peer_uuid
         self.peer_uuid = peer_uuid  # Store the peer UUID in the protocol instance
 
+        # Security: Authenticate the node if required
+        auth_success, auth_reason = SECURITY_MANAGER.authenticate_node(peer_uuid, data)
+        if not auth_success:
+            SECURITY_MANAGER.log_security_event(
+                "AUTHENTICATION_FAILED",
+                f"Node {peer_uuid} from {peer.host}:{peer.port} failed authentication: {auth_reason}",
+                "warning"
+            )
+            LOGGER.warning(
+                "%sAuthentication failed for %s:%d (UUID: %s) - %s%s",
+                RED_COLOR,
+                peer.host,
+                peer.port,
+                peer_uuid,
+                auth_reason,
+                RESET_COLOR,
+            )
+            self.transport.loseConnection()
+            return
+
+        # Security: Check if connection is still allowed with UUID
+        allowed, reason = SECURITY_MANAGER.is_connection_allowed(peer.host, peer_uuid)
+        if not allowed:
+            SECURITY_MANAGER.log_security_event(
+                "CONNECTION_REJECTED_AFTER_AUTH",
+                f"Connection from {peer.host}:{peer.port} (UUID: {peer_uuid}) rejected after auth: {reason}",
+                "warning"
+            )
+            LOGGER.warning(
+                "%sConnection rejected for %s:%d (UUID: %s) - %s%s",
+                RED_COLOR,
+                peer.host,
+                peer.port,
+                peer_uuid,
+                reason,
+                RESET_COLOR,
+            )
+            self.transport.loseConnection()
+            return
+
         LOGGER.info(
             "%sReceived handshake initiation from %s:%d (UUID: %s)%s",
             GREEN_COLOR,
@@ -205,6 +327,7 @@ class P2PProtocol(protocol.Protocol):
             peer.node_uuid,
             RESET_COLOR,
         )
+        
         if peer.node_uuid == self.factory.node_uuid:
             LOGGER.info(
                 "%sDisconnecting self-connection to %s:%d (UUID: %s)%s",
@@ -229,6 +352,12 @@ class P2PProtocol(protocol.Protocol):
             self.send_handshake_response(self.factory.node_uuid)
             self.handshake_complete = True  # Mark handshake as complete
             self.factory.known_uuids.add(peer_uuid)  # Add UUID to known UUIDs
+            
+            SECURITY_MANAGER.log_security_event(
+                "HANDSHAKE_COMPLETED",
+                f"Successful handshake with {peer.host}:{peer.port} (UUID: {peer_uuid})",
+                "info"
+            )
 
     def handle_handshake_response(self, data):
         """Handle handshake response message."""
@@ -240,6 +369,46 @@ class P2PProtocol(protocol.Protocol):
         peer.node_uuid = peer_uuid
         self.peer_uuid = peer_uuid  # Store the peer UUID in the protocol instance
 
+        # Security: Authenticate the node if required
+        auth_success, auth_reason = SECURITY_MANAGER.authenticate_node(peer_uuid, data)
+        if not auth_success:
+            SECURITY_MANAGER.log_security_event(
+                "AUTHENTICATION_FAILED",
+                f"Node {peer_uuid} from {peer.host}:{peer.port} failed authentication: {auth_reason}",
+                "warning"
+            )
+            LOGGER.warning(
+                "%sAuthentication failed for %s:%d (UUID: %s) - %s%s",
+                RED_COLOR,
+                peer.host,
+                peer.port,
+                peer_uuid,
+                auth_reason,
+                RESET_COLOR,
+            )
+            self.transport.loseConnection()
+            return
+
+        # Security: Check if connection is still allowed with UUID
+        allowed, reason = SECURITY_MANAGER.is_connection_allowed(peer.host, peer_uuid)
+        if not allowed:
+            SECURITY_MANAGER.log_security_event(
+                "CONNECTION_REJECTED_AFTER_AUTH",
+                f"Connection from {peer.host}:{peer.port} (UUID: {peer_uuid}) rejected after auth: {reason}",
+                "warning"
+            )
+            LOGGER.warning(
+                "%sConnection rejected for %s:%d (UUID: %s) - %s%s",
+                RED_COLOR,
+                peer.host,
+                peer.port,
+                peer_uuid,
+                reason,
+                RESET_COLOR,
+            )
+            self.transport.loseConnection()
+            return
+
         LOGGER.info(
             "%sReceived handshake response from %s:%d (UUID: %s)%s",
             GREEN_COLOR,
@@ -248,6 +417,7 @@ class P2PProtocol(protocol.Protocol):
             peer.node_uuid,
             RESET_COLOR,
         )
+        
         if peer.node_uuid == self.factory.node_uuid:
             LOGGER.info(
                 "%sDisconnecting self-connection to %s:%d (UUID: %s)%s",
@@ -271,6 +441,12 @@ class P2PProtocol(protocol.Protocol):
         else:
             self.handshake_complete = True  # Mark handshake as complete
             self.factory.known_uuids.add(peer_uuid)  # Add UUID to known UUIDs
+            
+            SECURITY_MANAGER.log_security_event(
+                "HANDSHAKE_COMPLETED",
+                f"Successful handshake with {peer.host}:{peer.port} (UUID: {peer_uuid})",
+                "info"
+            )
 
     def handle_check_p2p_data(self, data):
         """Handle check_p2p_data request and respond with data if available."""
@@ -430,6 +606,10 @@ class P2PProtocol(protocol.Protocol):
             RESET_COLOR,
             reason,
         )
+        
+        # Security: Unregister the connection
+        SECURITY_MANAGER.unregister_connection(peer.host, self.peer_uuid)
+        
         self.factory.peers = [
             p for p in self.factory.peers if p.host != peer.host or p.port != peer.port
         ]

@@ -37,7 +37,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "antispam-beacon=server.prime_radiant:main",
+            "antispam-beacon=server.p2p_beacon:main",
         ],
     },
     include_package_data=True,

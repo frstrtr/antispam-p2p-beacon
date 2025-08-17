@@ -148,7 +148,7 @@ def run_tests():
         print("✅ Server is accessible")
     except requests.RequestException:
         print("❌ Server is not accessible. Please start the server first:")
-        print("   python server/prime_radiant.py")
+        print("   python server/p2p_beacon.py")
         return False    # Run tests
     unittest.main(verbosity=2, exit=False)
     return True

@@ -20,6 +20,7 @@ from server.server_config import LOGGER
 from .config import YELLOW_COLOR, RESET_COLOR, PURPLE_COLOR, GREEN_COLOR, INVERSE_COLOR
 from .protocol import P2PProtocol
 from .address import PeerAddress
+from .security import SECURITY_MANAGER
 
 
 class P2PFactory(protocol.Factory):

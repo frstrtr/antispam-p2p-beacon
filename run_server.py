@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Antispam Beacon Server Launcher
-
-Simple launcher script for the antispam beacon server.
-This script provides an easy way to start the server with common configurations.
+Simple server runner for antispam beacon
 """
 
 import sys
 import os
-from server.prime_radiant import main
 
-if __name__ == "__main__":
-    main()
+# Add the project root to the Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from server.p2p_beacon import main

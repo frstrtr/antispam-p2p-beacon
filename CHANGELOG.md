@@ -1,109 +1,129 @@
 # Changelog
 
-All notable changes to the Antispam Beacon Server project will be documented in this file.
+All notable changes to the Antispam P2P Beacon project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2025-08-17
+## [2.0.0] - 2025-08-17
 
 ### Added
-- Initial release of Antispam Beacon Server
-- P2P distributed antispam network functionality
-- HTTP REST API for spam checking and reporting
-- WebSocket interface for real-time communication
-- Unified Global Unban (gunban) system
-- SQLite database for local spam data storage
-- Automatic P2P network discovery and connection
-- Bootstrap node support for network initialization
-- Comprehensive logging and monitoring
-- Message loop prevention in P2P network
-- Security restrictions (localhost-only APIs)
-- Configuration via environment variables
-- Example client implementations
-- Comprehensive test suite
-- Full API documentation
 
-### Features
-- **Spam Detection**: Real-time checking of user IDs against distributed database
-- **Spam Reporting**: Report new spammers with automatic network propagation
-- **Global Unban**: Unified system for removing spammer records across network
-- **P2P Synchronization**: Automatic data synchronization between network nodes
-- **Multi-Protocol Support**: HTTP REST, WebSocket, and P2P protocols
-- **High Availability**: Redundant node architecture for fault tolerance
-- **Rate Limiting**: Built-in protection against API abuse
-- **Audit Logging**: Comprehensive logging of all operations
+#### 🔒 Comprehensive Security System
 
-### API Endpoints
-- `GET /check` - Check spam status of user ID
-- `POST /check` - Check spam status (POST variant)
-- `POST /report_id` - Report new spammer to network
-- `POST /unban` - Global unban (remove spammer record)
-- `POST /remove_id` - Legacy remove endpoint (deprecated, redirects to unban)
+- **Pre-shared Key Authentication**: HMAC-SHA256 based node authentication
+- **Node Whitelisting/Blacklisting**: Granular access control for trusted nodes
+- **IP Address Filtering**: Block malicious IP addresses and rate limiting
+- **Enhanced Handshake Protocol**: Secure connection establishment with replay protection
+- **Security Event Logging**: Comprehensive audit trail of all security events
+- **DDoS Protection**: Multi-layered protection against network attacks
 
-### WebSocket Interface
-- Real-time bidirectional communication
-- JSON message format for spam checking
-- Persistent connection support
+#### 🔄 Hot Reload Functionality
 
-### P2P Protocol
-- Custom JSON-based messaging protocol
-- Automatic peer discovery and connection
-- Message types: handshake, spam_report, gunban, data_sync
-- Loop prevention with message ID tracking
-- Bootstrap node support
+- **Zero Downtime Updates**: Update security configuration without server restart
+- **Automatic Configuration Detection**: File modification time monitoring
+- **Manual Reload Capability**: Force configuration reload when needed
+- **Configuration File Watching**: Continuous monitoring with `watch_config.py`
 
-### Configuration
-- Environment variable configuration
-- Default port assignments (P2P: 9828, HTTP: 8081, WebSocket: 9000)
-- Bootstrap address configuration
-- Database file location configuration
-- Logging level configuration
+#### 🛠️ Management Tools
+
+- **Security Configuration Tool** (`utils/configure_security.py`): Complete security setup and management
+- **Trusted Node Management** (`utils/manage_trusted_nodes.py`): Whitelist management with hot reload
+- **Connection Monitor** (`utils/show_connecting_nodes.py`): Monitor and analyze connection attempts
+- **Configuration Reload** (`utils/reload_security.py`): Manual hot reload and status checking
+- **Beacon Configuration** (`utils/configure_beacon.py`): Dedicated beacon mode setup
+
+#### 🎯 Demonstration Scripts
+
+- **Security Demo** (`demos/demo_security.py`): Complete security feature demonstration
+- **Whitelist Demo** (`demos/demo_whitelist.py`): Node whitelist management workflow
+- **Hot Reload Demo** (`demos/demo_hot_reload.py`): Configuration hot reload showcase
+- **Complete Demo** (`demos/complete_demo.py`): Full feature demonstration
+- **Security Report** (`demos/security_report.py`): Implementation status report
+
+#### 📚 Documentation
+
+- **Hot Reload Guide** (`docs/HOT_RELOAD.md`): Comprehensive hot reload documentation
+- **Security Implementation Guide** (`P2P_SECURITY_COMPLETE.md`): Complete security overview
+- **Whitelist Management Guide** (`WHITELIST_MANAGEMENT_GUIDE.md`): Node access control guide
+
+### Enhanced
+
+#### 🔧 Core Components
+
+- **SecurityManager Class**: Complete security management with hot reload support
+- **P2P Protocol**: Enhanced with security integration and automatic config checking
+- **Server Configuration**: Extended with comprehensive security parameters
+
+#### ⚡ Performance & Reliability
+
+- **Rate Limiting**: Connection and message rate limiting per IP address
+- **Connection Tracking**: Efficient tracking of active connections and attempts
+- **Memory Management**: Optimized data structures for high-performance operation
 
 ### Security
-- Localhost-only API access
-- Input validation and sanitization
-- Rate limiting protection
-- Secure P2P message handling
-- Audit trail logging
 
-### Documentation
-- Comprehensive README with quick start guide
-- Full API documentation
-- Example client implementations (Python, WebSocket)
-- Setup and configuration guide
-- Architecture documentation
+#### 🛡️ Attack Vector Protection
 
-### Dependencies
-- twisted>=24.7.0 - Asynchronous networking framework
-- autobahn>=24.4.2 - WebSocket support
-- zope.interface>=7.1.1 - Interface definitions
-- pyOpenSSL>=24.2.1 - SSL/TLS support
-- service_identity>=24.2.1 - Service identity verification
-- python-dotenv>=1.1.1 - Environment configuration
-- requests>=2.32.3 - HTTP client
-- websockets>=13.1.0 - WebSocket client for testing
+- **Rogue Node Infiltration**: Prevented through pre-shared key authentication
+- **Sybil Attacks**: Mitigated with connection limits per IP
+- **Network Flooding**: Protected by rate limiting and throttling
+- **Data Poisoning**: Blocked through node authentication and verification
+- **Replay Attacks**: Prevented with timestamp validation
+- **Man-in-the-Middle**: Protected by HMAC authentication
 
-### Technical Details
-- Python 3.8+ compatibility
-- SQLite database with automatic schema creation
-- Twisted reactor-based asynchronous architecture
-- JSON serialization for all message formats
-- UUID-based node identification
-- Timestamp-based record tracking
-- Graceful error handling and recovery
+#### 🔐 Configuration Security
 
-### Testing
-- Unit test suite for API endpoints
-- Integration tests for P2P communication
-- Example client scripts for manual testing
-- WebSocket client for real-time testing
+- **Environment-based Configuration**: Secure .env file management
+- **Cryptographically Secure Keys**: Automatic generation of strong network keys
+- **Access Control Lists**: Fine-grained node and IP access control
 
-### Future Roadmap
-- Enhanced data synchronization protocols
-- Advanced spam detection algorithms
-- Network topology optimization
-- Performance metrics and monitoring
-- Web-based administration interface
-- API authentication and authorization
-- Distributed consensus mechanisms
+### Breaking Changes
+
+- **Configuration Format**: Security settings now use .env file format
+- **Node Authentication**: All P2P connections now require authentication by default
+- **API Compatibility**: No breaking changes to existing API endpoints
+
+### Migration Guide
+
+For existing installations:
+
+1. **Update Configuration**:
+
+   ```bash
+   python utils/configure_security.py setup
+   ```
+
+2. **Add Trusted Nodes**:
+
+   ```bash
+   python utils/manage_trusted_nodes.py add your-existing-node-id
+   ```
+
+3. **Restart Server**: Configuration changes require server restart (or use hot reload)
+
+## [1.0.0] - 2025-08-15
+
+### Features
+
+- Initial P2P beacon implementation
+- Basic API endpoints for spammer checking and reporting
+- SQLite database integration
+- WebSocket communication
+- Beacon mode functionality
+- Basic P2P network connectivity
+
+### API Endpoints
+
+- `GET /check?user_id=<id>` endpoint for spammer checking
+- `POST /report_id` endpoint for reporting spammers
+- P2P data synchronization between nodes
+- Configurable beacon mode for lightweight operation
+
+---
+
+## Security Notice
+
+This release includes significant security enhancements. All users are strongly encouraged to upgrade and configure the security features. The new security system provides enterprise-grade protection while maintaining full backward compatibility with existing bot integrations.
+
+For security-related questions or concerns, please refer to the security documentation or open an issue with the `security` label.

@@ -109,6 +109,27 @@ DATABASE_FILE = "spammers.db"
 # Beacon Mode Configuration
 BEACON_MODE_ONLY = os.getenv("BEACON_MODE_ONLY", "false").lower() in ("true", "1", "yes")
 
+# P2P Network Security Configuration
+NETWORK_SECRET_KEY = os.getenv("NETWORK_SECRET_KEY")  # Pre-shared secret for network authentication
+ENABLE_P2P_SECURITY = os.getenv("ENABLE_P2P_SECURITY", "true").lower() in ("true", "1", "yes")
+MAX_CONNECTIONS_PER_IP = int(os.getenv("MAX_CONNECTIONS_PER_IP", "3"))
+CONNECTION_RATE_LIMIT = int(os.getenv("CONNECTION_RATE_LIMIT", "10"))  # connections per minute
+MESSAGE_RATE_LIMIT = int(os.getenv("MESSAGE_RATE_LIMIT", "100"))  # messages per minute
+REQUIRE_NODE_AUTHENTICATION = os.getenv("REQUIRE_NODE_AUTHENTICATION", "true").lower() in ("true", "1", "yes")
+
+# Node Whitelisting/Blacklisting
+ALLOWED_NODE_KEYS = _parse_bootstrap_addresses(os.getenv("ALLOWED_NODE_KEYS"))  # comma-separated list of allowed node keys
+BLOCKED_NODE_KEYS = _parse_bootstrap_addresses(os.getenv("BLOCKED_NODE_KEYS"))  # comma-separated list of blocked node keys
+BLOCKED_IP_ADDRESSES = _parse_bootstrap_addresses(os.getenv("BLOCKED_IP_ADDRESSES"))  # comma-separated list of blocked IPs
+
+# Message Verification
+ENABLE_MESSAGE_SIGNING = os.getenv("ENABLE_MESSAGE_SIGNING", "false").lower() in ("true", "1", "yes")
+REJECT_UNSIGNED_MESSAGES = os.getenv("REJECT_UNSIGNED_MESSAGES", "false").lower() in ("true", "1", "yes")
+
+# Security Logging
+SECURITY_LOG_FILE = os.getenv("SECURITY_LOG_FILE", "security.log")
+LOG_SECURITY_EVENTS = os.getenv("LOG_SECURITY_EVENTS", "true").lower() in ("true", "1", "yes")
+
 # Legacy configuration variables (deprecated)
 BEACON = False
 # Set to True to enable beacon mode

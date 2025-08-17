@@ -1,8 +1,8 @@
-"""Prime Radiant - p2p antispam server."""
+"""P2P Beacon - p2p antispam server."""
 
 # SPDX-License-Identifier: MIT
 # -*- coding: utf-8 -*-
-# server/prime_radiant.py
+# server/p2p_beacon.py
 
 # TODO each node signature with spam markup criteria - to choose the best node for spam checking condition
 # TODO if no peers or bootsrap available node stops reconnecting
