@@ -260,5 +260,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ **Monitoring** - Real-time security event logging
 
 ---
-
-**🔒 Your P2P network is now fully protected against rogue nodes and ready for production use!**
