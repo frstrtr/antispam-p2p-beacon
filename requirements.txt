@@ -1,0 +1,16 @@
+# Antispam Beacon Server Dependencies
+# Core server framework
+twisted>=24.7.0
+autobahn>=24.4.2
+zope.interface>=7.1.1
+pyOpenSSL>=24.2.1
+service_identity>=24.2.1
+
+# Environment configuration
+python-dotenv>=1.1.1
+
+# HTTP client for API calls
+requests>=2.32.3
+
+# For testing WebSocket connections
+websockets>=13.1.0
